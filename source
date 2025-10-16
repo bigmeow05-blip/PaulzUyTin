@@ -1,0 +1,659 @@
+--//==============================\\--
+--||      Paulz Script v1.4c     ||--
+--||   FINAL FIX - Full Script   ||--
+--||   Spin fix + Boost (V) + AIM||
+--||       By Paulz & GPT5       ||--
+--\\==============================//--
+
+------------------------------------------------------------
+-- Services
+------------------------------------------------------------
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local TweenService = game:GetService("TweenService")
+local Lighting = game:GetService("Lighting")
+local UserInputService = game:GetService("UserInputService")
+local Debris = game:GetService("Debris")
+
+local LocalPlayer = Players.LocalPlayer
+local Camera = workspace.CurrentCamera
+local playerGui = LocalPlayer:WaitForChild("PlayerGui")
+
+------------------------------------------------------------
+-- SETTINGS
+------------------------------------------------------------
+local SPIN_SPEED = 15                -- spin speed (tunable)
+local BOOST_WALKSPEED = 50
+local BOOST_JUMPPOWER = 30
+local DEFAULT_WALKSPEED = 16
+local DEFAULT_JUMPPOWER = 50
+local HITBOX_SIZE = Vector3.new(15,15,15)
+local NORMAL_HEAD = Vector3.new(2,1,1)
+local HIGHLIGHT_COLOR = Color3.fromRGB(255,100,100)
+
+local hoverSoundId = "rbxassetid://912874091"
+local clickSoundId = "rbxassetid://912874070"
+local timestopSoundId = "rbxassetid://9128775942"
+
+-- AIM
+local AIM_RADIUS = 250               -- pixels
+local AIM_SMOOTH = 0.95              -- 0..1 (1 = near-instant strong lock)
+local aimOn = false
+
+------------------------------------------------------------
+-- Helpers
+------------------------------------------------------------
+local function playSound(parent, id)
+	pcall(function()
+		local s = Instance.new("Sound")
+		s.SoundId = id
+		s.Volume = 0.8
+		s.Parent = parent
+		s:Play()
+		Debris:AddItem(s, 3)
+	end)
+end
+
+local function applyUIButtonFX(btn)
+	if not btn then return end
+	local ok, orig = pcall(function() return btn.BackgroundColor3 end)
+	if not ok then return end
+	btn.MouseEnter:Connect(function()
+		pcall(function()
+			btn.BackgroundColor3 = Color3.fromRGB(200,30,30)
+			playSound(btn, hoverSoundId)
+		end)
+	end)
+	btn.MouseLeave:Connect(function()
+		pcall(function() btn.BackgroundColor3 = orig end)
+	end)
+	btn.MouseButton1Click:Connect(function()
+		pcall(function() playSound(btn, clickSoundId) end)
+	end)
+end
+
+------------------------------------------------------------
+-- GUI Setup
+------------------------------------------------------------
+local gui = Instance.new("ScreenGui")
+gui.Name = "Paulz_UI_v1_4c"
+gui.ResetOnSpawn = false
+gui.Parent = playerGui
+
+local toggle = Instance.new("ImageButton", gui)
+toggle.Image = "rbxassetid://6031068426"
+toggle.Size = UDim2.new(0,68,0,68)
+toggle.Position = UDim2.new(0,70,0,150)
+toggle.BackgroundTransparency = 1
+toggle.Draggable = true
+
+local main = Instance.new("Frame", gui)
+main.Name = "Main"
+main.Size = UDim2.new(0,520,0,360)
+main.Position = UDim2.new(0.5,-260,0.5,-180)
+main.BackgroundColor3 = Color3.fromRGB(15,0,0)
+main.Visible = false
+main.Active = true
+main.Draggable = true
+Instance.new("UICorner", main).CornerRadius = UDim.new(0,12)
+local stroke = Instance.new("UIStroke", main)
+stroke.Color = Color3.fromRGB(255,60,60)
+stroke.Thickness = 2.5
+
+local title = Instance.new("TextLabel", main)
+title.Size = UDim2.new(1,-80,0,44)
+title.Position = UDim2.new(0,20,0,8)
+title.BackgroundTransparency = 1
+title.Font = Enum.Font.GothamBold
+title.TextColor3 = Color3.new(1,1,1)
+title.TextScaled = true
+title.TextXAlignment = Enum.TextXAlignment.Left
+title.Text = "Script By Paulz (v1.4c FINAL)"
+
+local close = Instance.new("TextButton", main)
+close.Size = UDim2.new(0,28,0,28)
+close.Position = UDim2.new(1,-42,0,8)
+close.Text = "✖"
+close.Font = Enum.Font.GothamBold
+close.TextColor3 = Color3.fromRGB(255,120,120)
+close.BackgroundTransparency = 1
+close.TextScaled = true
+applyUIButtonFX(close)
+
+local sidebar = Instance.new("Frame", main)
+sidebar.Size = UDim2.new(0,140,1,-70)
+sidebar.Position = UDim2.new(0,10,0,64)
+sidebar.BackgroundColor3 = Color3.fromRGB(30,0,0)
+Instance.new("UICorner", sidebar)
+local sStroke = Instance.new("UIStroke", sidebar)
+sStroke.Color = Color3.fromRGB(255,60,60)
+
+local content = Instance.new("Frame", main)
+content.Size = UDim2.new(1,-180,1,-86)
+content.Position = UDim2.new(0,160,0,64)
+content.BackgroundTransparency = 1
+
+------------------------------------------------------------
+-- Tabs
+------------------------------------------------------------
+local Tabs = {"ESP / AIM","Fix Lag","Info","PvP"}
+local TabButtons, TabFrames = {}, {}
+
+for i,name in ipairs(Tabs) do
+	local b = Instance.new("TextButton", sidebar)
+	b.Size = UDim2.new(1,-16,0,44)
+	b.Position = UDim2.new(0,8,0,(i-1)*52+8)
+	b.Text = name
+	b.Font = Enum.Font.GothamBold
+	b.TextColor3 = Color3.new(1,1,1)
+	b.BackgroundColor3 = Color3.fromRGB(55,0,0)
+	b.TextScaled = true
+	Instance.new("UICorner", b)
+	local s = Instance.new("UIStroke", b)
+	s.Color = Color3.fromRGB(255,60,60)
+	applyUIButtonFX(b)
+	TabButtons[name] = b
+
+	local f = Instance.new("Frame", content)
+	f.Size = UDim2.new(1,0,1,0)
+	f.Visible = false
+	f.BackgroundTransparency = 1
+	local bg = Instance.new("Frame", f)
+	bg.Size = UDim2.new(1,-10,1,-10)
+	bg.Position = UDim2.new(0,5,0,5)
+	bg.BackgroundColor3 = Color3.fromRGB(25,0,0)
+	Instance.new("UICorner", bg)
+	local st = Instance.new("UIStroke", bg)
+	st.Color = Color3.fromRGB(255,50,50)
+	TabFrames[name] = bg
+end
+
+local info = Instance.new("TextLabel", TabFrames["Info"])
+info.Size = UDim2.new(1,-20,1,-20)
+info.Position = UDim2.new(0,10,0,10)
+info.BackgroundTransparency = 1
+info.TextColor3 = Color3.new(1,1,1)
+info.Font = Enum.Font.GothamBold
+info.TextScaled = true
+info.TextWrapped = true
+info.Text = "Paulz Script v1.4c FINAL\nESP (Z) • Boost (V) • Spin (X) • TimeStop (C) • Aim Circle (R)\nAim: Rainbow circle, strong lock"
+
+------------------------------------------------------------
+-- PvP: Spin / Boost / TimeStop
+------------------------------------------------------------
+local PvPBG = TabFrames["PvP"]
+
+-- Spin (BodyAngularVelocity + restore AutoRotate + camera lerp on disable)
+local spinOn = false
+local spinBtn = Instance.new("TextButton", PvPBG)
+spinBtn.Size = UDim2.new(0.78,0,0,44)
+spinBtn.Position = UDim2.new(0.11,0,0.08,0)
+spinBtn.Text = "Spin Tornado (X): OFF"
+spinBtn.Font = Enum.Font.GothamBold
+spinBtn.TextScaled = true
+spinBtn.BackgroundColor3 = Color3.fromRGB(60,0,0)
+spinBtn.TextColor3 = Color3.new(1,1,1)
+Instance.new("UICorner", spinBtn)
+applyUIButtonFX(spinBtn)
+
+local function ensureBAV(char)
+	if not char then return nil end
+	local hrp = char:FindFirstChild("HumanoidRootPart")
+	if not hrp then return nil end
+	local bav = hrp:FindFirstChild("Paulz_SpinBAV")
+	if not bav then
+		bav = Instance.new("BodyAngularVelocity")
+		bav.Name = "Paulz_SpinBAV"
+		bav.MaxTorque = Vector3.new(0, math.huge, 0)
+		bav.AngularVelocity = Vector3.new(0, 0, 0)
+		bav.Parent = hrp
+	end
+	return bav
+end
+
+local function lerpCameraToCharacterOnce()
+	local char = LocalPlayer.Character
+	if not char then return end
+	local hrp = char:FindFirstChild("HumanoidRootPart")
+	if not hrp then return end
+	local camPos = Camera.CFrame.Position
+	-- desired look at direction: look at a point in front of hrp so camera faces same dir as hrp
+	local desired = CFrame.new(camPos, hrp.Position + hrp.CFrame.LookVector)
+	local start = Camera.CFrame
+	local steps = 10
+	for i = 1, steps do
+		Camera.CFrame = start:Lerp(desired, i/steps)
+		task.wait(0.02)
+	end
+end
+
+local function setSpin(state)
+	spinOn = state
+	spinBtn.Text = "Spin Tornado (X): " .. (spinOn and "ON" or "OFF")
+	local char = LocalPlayer.Character
+	if char then
+		local hum = char:FindFirstChildOfClass("Humanoid")
+		local bav = ensureBAV(char)
+		if spinOn then
+			if hum then hum.AutoRotate = false end
+			if bav then bav.AngularVelocity = Vector3.new(0, SPIN_SPEED, 0) end
+		else
+			if bav then bav.AngularVelocity = Vector3.new(0, 0, 0) end
+			if hum then hum.AutoRotate = true end
+			-- smooth camera correction
+			lerpCameraToCharacterOnce()
+		end
+	end
+end
+
+spinBtn.MouseButton1Click:Connect(function() setSpin(not spinOn) end)
+
+-- Ensure BAV on respawn if spinOn
+LocalPlayer.CharacterAdded:Connect(function(char)
+	task.wait(0.4)
+	if spinOn then
+		local bav = ensureBAV(char)
+		if bav then bav.AngularVelocity = Vector3.new(0, SPIN_SPEED, 0) end
+	end
+end)
+
+-- Boost Mode (Speed + Jump) single toggle (V)
+local boostOn = false
+local boostBtn = Instance.new("TextButton", PvPBG)
+boostBtn.Size = UDim2.new(0.78,0,0,44)
+boostBtn.Position = UDim2.new(0.11,0,0.34,0)
+boostBtn.Text = "Boost Mode (V): OFF"
+boostBtn.Font = Enum.Font.GothamBold
+boostBtn.TextScaled = true
+boostBtn.BackgroundColor3 = Color3.fromRGB(60,0,0)
+boostBtn.TextColor3 = Color3.new(1,1,1)
+Instance.new("UICorner", boostBtn)
+applyUIButtonFX(boostBtn)
+
+local function setBoost(state)
+	boostOn = state
+	boostBtn.Text = "Boost Mode (V): " .. (boostOn and "ON" or "OFF")
+	local humanoid = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
+	if humanoid then
+		if boostOn then
+			humanoid.WalkSpeed = BOOST_WALKSPEED
+			humanoid.JumpPower = BOOST_JUMPPOWER
+		else
+			humanoid.WalkSpeed = DEFAULT_WALKSPEED
+			humanoid.JumpPower = DEFAULT_JUMPPOWER
+		end
+	end
+end
+
+boostBtn.MouseButton1Click:Connect(function() setBoost(not boostOn) end)
+
+-- TimeStop + Hitbox (C)
+local timestopOn = false
+local timestopBtn = Instance.new("TextButton", PvPBG)
+timestopBtn.Size = UDim2.new(0.78,0,0,44)
+timestopBtn.Position = UDim2.new(0.11,0,0.60,0)
+timestopBtn.Text = "TimeStop + Hitbox (C): OFF"
+timestopBtn.Font = Enum.Font.GothamBold
+timestopBtn.TextScaled = true
+timestopBtn.BackgroundColor3 = Color3.fromRGB(60,0,0)
+timestopBtn.TextColor3 = Color3.new(1,1,1)
+Instance.new("UICorner", timestopBtn)
+applyUIButtonFX(timestopBtn)
+
+local function setTimeStop(state)
+	timestopOn = state
+	timestopBtn.Text = "TimeStop + Hitbox (C): " .. (state and "ON" or "OFF")
+	playSound(main, timestopSoundId)
+	for _, p in ipairs(Players:GetPlayers()) do
+		if p ~= LocalPlayer and p.Character then
+			local char = p.Character
+			local hum = char:FindFirstChildOfClass("Humanoid")
+			local head = char:FindFirstChild("Head")
+			if hum and head then
+				if state then
+					hum.WalkSpeed = 0
+					hum.JumpPower = 0
+					pcall(function() head.Size = HITBOX_SIZE head.CanCollide = false end)
+					if not char:FindFirstChildWhichIsA("Highlight") then
+						local fx = Instance.new("Highlight", char)
+						fx.FillColor = Color3.fromRGB(180,180,255)
+						fx.OutlineColor = Color3.fromRGB(255,255,255)
+						fx.FillTransparency = 0.4
+					end
+				else
+					hum.WalkSpeed = DEFAULT_WALKSPEED
+					hum.JumpPower = DEFAULT_JUMPPOWER
+					pcall(function() head.Size = NORMAL_HEAD head.CanCollide = true end)
+					for _,v in ipairs(char:GetChildren()) do if v:IsA("Highlight") then v:Destroy() end end
+				end
+			end
+		end
+	end
+end
+
+timestopBtn.MouseButton1Click:Connect(function() setTimeStop(not timestopOn) end)
+
+------------------------------------------------------------
+-- ESP / AIM (Highlight + Name + HP + Aim Circle)
+------------------------------------------------------------
+local ESPBG = TabFrames["ESP / AIM"]
+local espEnabled = false
+local espObjects = {}
+
+-- ESP toggle UI and function
+local espBtn = Instance.new("TextButton", ESPBG)
+espBtn.Size = UDim2.new(0.78,0,0,44)
+espBtn.Position = UDim2.new(0.11,0,0.08,0)
+espBtn.Text = "ESP (Z): OFF"
+espBtn.Font = Enum.Font.GothamBold
+espBtn.TextScaled = true
+espBtn.BackgroundColor3 = Color3.fromRGB(60,0,0)
+espBtn.TextColor3 = Color3.new(1,1,1)
+Instance.new("UICorner", espBtn)
+applyUIButtonFX(espBtn)
+
+local function createESP(player)
+	if player == LocalPlayer then return end
+	if not player.Character then return end
+	local char = player.Character
+	local humanoid = char:FindFirstChildOfClass("Humanoid")
+	local hrp = char:FindFirstChild("HumanoidRootPart")
+	if not humanoid or not hrp then return end
+	if espObjects[player] then return end
+
+	local hl = Instance.new("Highlight", char)
+	hl.FillColor = HIGHLIGHT_COLOR
+	hl.FillTransparency = 0.7
+	hl.OutlineColor = Color3.fromRGB(255,50,50)
+	hl.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+	hl.Enabled = espEnabled
+
+	local guiBill = Instance.new("BillboardGui", char)
+	guiBill.AlwaysOnTop = true
+	guiBill.Size = UDim2.new(0,160,0,36)
+	guiBill.StudsOffset = Vector3.new(0, 3.5, 0)
+	guiBill.Enabled = espEnabled
+
+	local nameLabel = Instance.new("TextLabel", guiBill)
+	nameLabel.Size = UDim2.new(1,0,0.55,0)
+	nameLabel.Position = UDim2.new(0,0,0,0)
+	nameLabel.BackgroundTransparency = 1
+	nameLabel.TextColor3 = Color3.new(1,1,1)
+	nameLabel.Font = Enum.Font.GothamBold
+	nameLabel.TextScaled = true
+	nameLabel.Text = player.Name
+
+	local hpBack = Instance.new("Frame", guiBill)
+	hpBack.Size = UDim2.new(1,0,0.35,0)
+	hpBack.Position = UDim2.new(0,0,0.65,0)
+	hpBack.BackgroundColor3 = Color3.fromRGB(60,0,0)
+	hpBack.BorderSizePixel = 0
+	Instance.new("UICorner", hpBack)
+
+	local hpBar = Instance.new("Frame", hpBack)
+	hpBar.BackgroundColor3 = Color3.fromRGB(0,255,0)
+	hpBar.BorderSizePixel = 0
+	hpBar.Size = UDim2.new(1,0,1,0)
+	Instance.new("UICorner", hpBar)
+
+	espObjects[player] = {Highlight = hl, Billboard = guiBill, HPBar = hpBar, Humanoid = humanoid}
+
+	local function updateHP(hp)
+		if humanoid and humanoid.MaxHealth > 0 then
+			local ratio = math.clamp(hp / humanoid.MaxHealth, 0, 1)
+			hpBar.Size = UDim2.new(ratio, 0, 1, 0)
+			if ratio > 0.5 then
+				hpBar.BackgroundColor3 = Color3.fromRGB(0,255,0)
+			elseif ratio > 0.25 then
+				hpBar.BackgroundColor3 = Color3.fromRGB(255,255,0)
+			else
+				hpBar.BackgroundColor3 = Color3.fromRGB(255,0,0)
+			end
+		end
+	end
+
+	updateHP(humanoid.Health)
+	humanoid.HealthChanged:Connect(updateHP)
+end
+
+local function destroyESPFor(player)
+	if espObjects[player] then
+		if espObjects[player].Highlight then espObjects[player].Highlight:Destroy() end
+		if espObjects[player].Billboard then espObjects[player].Billboard:Destroy() end
+		espObjects[player] = nil
+	end
+end
+
+local function toggleESP(state)
+	if state == nil then
+		espEnabled = not espEnabled
+	else
+		espEnabled = state
+	end
+	espBtn.Text = "ESP (Z): " .. (espEnabled and "ON" or "OFF")
+
+	for _,p in ipairs(Players:GetPlayers()) do
+		if p ~= LocalPlayer then
+			if espEnabled then
+				if p.Character then createESP(p) end
+			else
+				destroyESPFor(p)
+			end
+		end
+	end
+end
+
+espBtn.MouseButton1Click:Connect(function() toggleESP() end)
+
+Players.PlayerAdded:Connect(function(p)
+	p.CharacterAdded:Connect(function()
+		task.wait(0.8)
+		if espEnabled then createESP(p) end
+	end)
+end)
+Players.PlayerRemoving:Connect(function(p) destroyESPFor(p) end)
+
+-- Aim UI button
+local aimBtn = Instance.new("TextButton", ESPBG)
+aimBtn.Size = UDim2.new(0.78,0,0,36)
+aimBtn.Position = UDim2.new(0.11,0,0.54,0)
+aimBtn.Text = "Aim Circle (R): OFF"
+aimBtn.Font = Enum.Font.GothamBold
+aimBtn.TextScaled = true
+aimBtn.BackgroundColor3 = Color3.fromRGB(40,0,0)
+aimBtn.TextColor3 = Color3.new(1,1,1)
+Instance.new("UICorner", aimBtn)
+applyUIButtonFX(aimBtn)
+
+-- Aim circle (rainbow)
+local aimCircleSize = AIM_RADIUS * 2
+local aimCircle = Instance.new("Frame", gui)
+aimCircle.Name = "AimCircle"
+aimCircle.Size = UDim2.new(0, aimCircleSize, 0, aimCircleSize)
+aimCircle.Position = UDim2.new(0.5,0,0.5,0)
+aimCircle.AnchorPoint = Vector2.new(0.5,0.5)
+aimCircle.BackgroundTransparency = 1
+aimCircle.Visible = false
+
+local circleInner = Instance.new("Frame", aimCircle)
+circleInner.Size = UDim2.new(1,0,1,0)
+circleInner.Position = UDim2.new(0,0,0,0)
+circleInner.BackgroundTransparency = 1
+local uic = Instance.new("UICorner", circleInner)
+uic.CornerRadius = UDim.new(1,0)
+
+local strokeCircle = Instance.new("UIStroke", circleInner)
+strokeCircle.Thickness = 5
+strokeCircle.LineJoinMode = Enum.LineJoinMode.Round
+strokeCircle.Color = Color3.fromHSV(0,1,1)
+
+local fill = Instance.new("Frame", circleInner)
+fill.Size = UDim2.new(1,-10,1,-10)
+fill.Position = UDim2.new(0,5,0,5)
+fill.BackgroundTransparency = 0.94
+local fillcorner = Instance.new("UICorner", fill)
+fillcorner.CornerRadius = UDim.new(1,0)
+
+local function setAimState(state)
+	aimOn = state
+	aimBtn.Text = "Aim Circle (R): " .. (aimOn and "ON" or "OFF")
+	aimCircle.Visible = aimOn
+end
+
+aimBtn.MouseButton1Click:Connect(function() setAimState(not aimOn) end)
+
+------------------------------------------------------------
+-- Aim logic
+------------------------------------------------------------
+local function findNearestTargetInCircle()
+	local cam = Camera
+	local cx = cam.ViewportSize.X / 2
+	local cy = cam.ViewportSize.Y / 2
+	local best, bestDist = nil, math.huge
+	for _,p in ipairs(Players:GetPlayers()) do
+		if p ~= LocalPlayer and p.Character and p.Character:FindFirstChild("Head") and p.Character:FindFirstChildOfClass("Humanoid") then
+			local head = p.Character.Head
+			local humanoid = p.Character:FindFirstChildOfClass("Humanoid")
+			if humanoid and humanoid.Health > 0 then
+				local screenPos, onScreen = cam:WorldToViewportPoint(head.Position)
+				if onScreen then
+					local dx = screenPos.X - cx
+					local dy = screenPos.Y - cy
+					local dist = math.sqrt(dx*dx + dy*dy)
+					if dist <= AIM_RADIUS and dist < bestDist then
+						best = p
+						bestDist = dist
+					end
+				end
+			end
+		end
+	end
+	return best
+end
+
+local hue = 0
+RunService.RenderStepped:Connect(function(dt)
+	-- rainbow update
+	hue = (hue + dt * 0.15) % 1
+	pcall(function() strokeCircle.Color = Color3.fromHSV(hue, 1, 1) end)
+
+	-- aim lock
+	if aimOn then
+		local tgt = findNearestTargetInCircle()
+		if tgt and tgt.Character and tgt.Character:FindFirstChild("Head") then
+			local headPos = tgt.Character.Head.Position
+			local camCF = Camera.CFrame
+			local desired = CFrame.new(camCF.Position, headPos)
+			Camera.CFrame = camCF:Lerp(desired, AIM_SMOOTH)
+		end
+	end
+end)
+
+------------------------------------------------------------
+-- Fix Lag
+------------------------------------------------------------
+local FixBG = TabFrames["Fix Lag"]
+local fixBtn = Instance.new("TextButton", FixBG)
+fixBtn.Size = UDim2.new(0.8,0,0,44)
+fixBtn.Position = UDim2.new(0.1,0,0.1,0)
+fixBtn.Text = "Fix Lag (Keep Sky)"
+fixBtn.Font = Enum.Font.GothamBold
+fixBtn.TextScaled = true
+fixBtn.BackgroundColor3 = Color3.fromRGB(60,0,0)
+fixBtn.TextColor3 = Color3.new(1,1,1)
+Instance.new("UICorner", fixBtn)
+applyUIButtonFX(fixBtn)
+
+fixBtn.MouseButton1Click:Connect(function()
+	local L = Lighting
+	L.GlobalShadows = false
+	L.Brightness = 1
+	L.ExposureCompensation = 0
+	L.FogEnd = 100000
+	for _,v in ipairs(L:GetChildren()) do
+		if v:IsA("BloomEffect") or v:IsA("BlurEffect") or v:IsA("SunRaysEffect") or v:IsA("ColorCorrectionEffect") then
+			v.Enabled = false
+		end
+	end
+	playSound(main, clickSoundId)
+	fixBtn.Text = "✅ Done!"
+	task.wait(1.5)
+	fixBtn.Text = "Fix Lag (Keep Sky)"
+end)
+
+------------------------------------------------------------
+-- Keybinds
+-- Z = ESP, V = Boost, X = Spin, C = TimeStop, R = Aim
+------------------------------------------------------------
+UserInputService.InputBegan:Connect(function(input, gpe)
+	if gpe then return end
+	if input.KeyCode == Enum.KeyCode.Z then
+		toggleESP()
+	elseif input.KeyCode == Enum.KeyCode.V then
+		setBoost(not boostOn)
+	elseif input.KeyCode == Enum.KeyCode.X then
+		setSpin(not spinOn)
+	elseif input.KeyCode == Enum.KeyCode.C then
+		setTimeStop(not timestopOn)
+	elseif input.KeyCode == Enum.KeyCode.R then
+		setAimState(not aimOn)
+	end
+end)
+
+------------------------------------------------------------
+-- Tabs + Toggle
+------------------------------------------------------------
+local function openTab(n)
+	for name,frame in pairs(TabFrames) do
+		frame.Parent.Visible = (name==n)
+	end
+end
+for n,b in pairs(TabButtons) do
+	b.MouseButton1Click:Connect(function() openTab(n) end)
+end
+openTab("Info")
+
+toggle.MouseButton1Click:Connect(function()
+	main.Visible = not main.Visible
+	playSound(main, clickSoundId)
+end)
+close.MouseButton1Click:Connect(function()
+	main.Visible = false
+	playSound(main, clickSoundId)
+end)
+
+------------------------------------------------------------
+-- FPS Counter
+------------------------------------------------------------
+local fpsLabel = Instance.new("TextLabel", main)
+fpsLabel.Size = UDim2.new(0,100,0,24)
+fpsLabel.Position = UDim2.new(1,-120,1,-32)
+fpsLabel.BackgroundTransparency = 1
+fpsLabel.TextColor3 = Color3.fromRGB(255,255,255)
+fpsLabel.TextScaled = true
+fpsLabel.Font = Enum.Font.Gotham
+local fps,last=0,tick()
+RunService.RenderStepped:Connect(function()
+	fps+=1
+	if tick()-last>=1 then
+		fpsLabel.Text="FPS: "..fps
+		fps,last=0,tick()
+	end
+end)
+
+------------------------------------------------------------
+-- Ensure ESP for existing players if enabled
+------------------------------------------------------------
+for _,p in ipairs(Players:GetPlayers()) do
+	if p ~= LocalPlayer then
+		if p.Character and espEnabled then createESP(p) end
+		p.CharacterAdded:Connect(function()
+			task.wait(0.8)
+			if espEnabled then createESP(p) end
+		end)
+	end
+end
+
+------------------------------------------------------------
+-- End of Script
+------------------------------------------------------------
