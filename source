@@ -1,8 +1,8 @@
 --//==============================\\--
---||      Paulz Script v1.4c     ||--
---||   FINAL FIX - Full Script   ||--
---||   Spin fix + Boost (V) + AIM||
---||       By Paulz & GPT5       ||--
+--||      Paulz Script v1.4d     ||--
+--||   FINAL - Hitbox (no TimeStop)|| 
+--||   Spin + Boost + ESP + AIM   ||
+--||       By Paulz & GPT5        ||
 --\\==============================//--
 
 ------------------------------------------------------------
@@ -22,21 +22,20 @@ local playerGui = LocalPlayer:WaitForChild("PlayerGui")
 ------------------------------------------------------------
 -- SETTINGS
 ------------------------------------------------------------
-local SPIN_SPEED = 15                -- spin speed (tunable)
+local SPIN_SPEED = 15                -- spin speed
 local BOOST_WALKSPEED = 50
 local BOOST_JUMPPOWER = 30
 local DEFAULT_WALKSPEED = 16
 local DEFAULT_JUMPPOWER = 50
-local HITBOX_SIZE = Vector3.new(15,15,15)
-local NORMAL_HEAD = Vector3.new(2,1,1)
+local HITBOX_SIZE = Vector3.new(25,25,25) -- used for hitbox expansion
+local NORMAL_HRP = Vector3.new(2,2,1)     -- restore size
 local HIGHLIGHT_COLOR = Color3.fromRGB(255,100,100)
 
 local hoverSoundId = "rbxassetid://912874091"
 local clickSoundId = "rbxassetid://912874070"
-local timestopSoundId = "rbxassetid://9128775942"
 
 -- AIM
-local AIM_RADIUS = 250               -- pixels
+local AIM_RADIUS = 400               -- pixels
 local AIM_SMOOTH = 0.95              -- 0..1 (1 = near-instant strong lock)
 local aimOn = false
 
@@ -76,7 +75,7 @@ end
 -- GUI Setup
 ------------------------------------------------------------
 local gui = Instance.new("ScreenGui")
-gui.Name = "Paulz_UI_v1_4c"
+gui.Name = "Paulz_UI_v1_4d"
 gui.ResetOnSpawn = false
 gui.Parent = playerGui
 
@@ -108,7 +107,7 @@ title.Font = Enum.Font.GothamBold
 title.TextColor3 = Color3.new(1,1,1)
 title.TextScaled = true
 title.TextXAlignment = Enum.TextXAlignment.Left
-title.Text = "Script By Paulz (v1.4c FINAL)"
+title.Text = "Script By Paulz (v1.4d FINAL)"
 
 local close = Instance.new("TextButton", main)
 close.Size = UDim2.new(0,28,0,28)
@@ -176,10 +175,10 @@ info.TextColor3 = Color3.new(1,1,1)
 info.Font = Enum.Font.GothamBold
 info.TextScaled = true
 info.TextWrapped = true
-info.Text = "Paulz Script v1.4c FINAL\nESP (Z) • Boost (V) • Spin (X) • TimeStop (C) • Aim Circle (R)\nAim: Rainbow circle, strong lock"
+info.Text = "Paulz Script v1.4d FINAL\nESP (Z) • Boost (V) • Spin (X) • Hitbox (C) • Aim Circle (R)\nNo TimeStop, Safe Hitbox Expand."
 
 ------------------------------------------------------------
--- PvP: Spin / Boost / TimeStop
+-- PvP: Spin / Boost / Hitbox
 ------------------------------------------------------------
 local PvPBG = TabFrames["PvP"]
 
@@ -287,51 +286,58 @@ end
 
 boostBtn.MouseButton1Click:Connect(function() setBoost(not boostOn) end)
 
--- TimeStop + Hitbox (C)
-local timestopOn = false
-local timestopBtn = Instance.new("TextButton", PvPBG)
-timestopBtn.Size = UDim2.new(0.78,0,0,44)
-timestopBtn.Position = UDim2.new(0.11,0,0.60,0)
-timestopBtn.Text = "TimeStop + Hitbox (C): OFF"
-timestopBtn.Font = Enum.Font.GothamBold
-timestopBtn.TextScaled = true
-timestopBtn.BackgroundColor3 = Color3.fromRGB(60,0,0)
-timestopBtn.TextColor3 = Color3.new(1,1,1)
-Instance.new("UICorner", timestopBtn)
-applyUIButtonFX(timestopBtn)
+-- Hitbox Toggle (C)  — replaces TimeStop + Hitbox
+local hitboxOn = false
+local hitboxBtn = Instance.new("TextButton", PvPBG)
+hitboxBtn.Size = UDim2.new(0.78,0,0,44)
+hitboxBtn.Position = UDim2.new(0.11,0,0.60,0)
+hitboxBtn.Text = "Enable Hitbox (C): OFF"
+hitboxBtn.Font = Enum.Font.GothamBold
+hitboxBtn.TextScaled = true
+hitboxBtn.BackgroundColor3 = Color3.fromRGB(60,0,0)
+hitboxBtn.TextColor3 = Color3.new(1,1,1)
+Instance.new("UICorner", hitboxBtn)
+applyUIButtonFX(hitboxBtn)
 
-local function setTimeStop(state)
-	timestopOn = state
-	timestopBtn.Text = "TimeStop + Hitbox (C): " .. (state and "ON" or "OFF")
-	playSound(main, timestopSoundId)
+local _G_HitboxSize = 25
+local _G_HitboxDisabled = true
+
+local function applyDynamicHitbox()
 	for _, p in ipairs(Players:GetPlayers()) do
-		if p ~= LocalPlayer and p.Character then
-			local char = p.Character
-			local hum = char:FindFirstChildOfClass("Humanoid")
-			local head = char:FindFirstChild("Head")
-			if hum and head then
-				if state then
-					hum.WalkSpeed = 0
-					hum.JumpPower = 0
-					pcall(function() head.Size = HITBOX_SIZE head.CanCollide = false end)
-					if not char:FindFirstChildWhichIsA("Highlight") then
-						local fx = Instance.new("Highlight", char)
-						fx.FillColor = Color3.fromRGB(180,180,255)
-						fx.OutlineColor = Color3.fromRGB(255,255,255)
-						fx.FillTransparency = 0.4
-					end
-				else
-					hum.WalkSpeed = DEFAULT_WALKSPEED
-					hum.JumpPower = DEFAULT_JUMPPOWER
-					pcall(function() head.Size = NORMAL_HEAD head.CanCollide = true end)
-					for _,v in ipairs(char:GetChildren()) do if v:IsA("Highlight") then v:Destroy() end end
+		if p ~= LocalPlayer and p.Character and p.Character:FindFirstChild("HumanoidRootPart") then
+			local hrp = p.Character.HumanoidRootPart
+			if not _G_HitboxDisabled then
+				hrp.Size = Vector3.new(_G_HitboxSize, _G_HitboxSize, _G_HitboxSize)
+				hrp.Transparency = 0.6
+				hrp.Material = Enum.Material.Neon
+				hrp.BrickColor = BrickColor.new("Really blue")
+				hrp.CanCollide = false
+			else
+				-- restore defaults (only if the object exists)
+				if hrp then
+					hrp.Size = NORMAL_HRP
+					hrp.Transparency = 1
+					hrp.CanCollide = true
 				end
 			end
 		end
 	end
 end
 
-timestopBtn.MouseButton1Click:Connect(function() setTimeStop(not timestopOn) end)
+task.spawn(function()
+	while true do
+		applyDynamicHitbox()
+		task.wait(0.2)
+	end
+end)
+
+local function setHitbox(state)
+	hitboxOn = state
+	_G_HitboxDisabled = not state
+	hitboxBtn.Text = "Enable Hitbox (C): " .. (hitboxOn and "ON" or "OFF")
+end
+
+hitboxBtn.MouseButton1Click:Connect(function() setHitbox(not hitboxOn) end)
 
 ------------------------------------------------------------
 -- ESP / AIM (Highlight + Name + HP + Aim Circle)
@@ -583,7 +589,7 @@ end)
 
 ------------------------------------------------------------
 -- Keybinds
--- Z = ESP, V = Boost, X = Spin, C = TimeStop, R = Aim
+-- Z = ESP, V = Boost, X = Spin, C = Hitbox, R = Aim
 ------------------------------------------------------------
 UserInputService.InputBegan:Connect(function(input, gpe)
 	if gpe then return end
@@ -594,7 +600,7 @@ UserInputService.InputBegan:Connect(function(input, gpe)
 	elseif input.KeyCode == Enum.KeyCode.X then
 		setSpin(not spinOn)
 	elseif input.KeyCode == Enum.KeyCode.C then
-		setTimeStop(not timestopOn)
+		setHitbox(not hitboxOn)
 	elseif input.KeyCode == Enum.KeyCode.R then
 		setAimState(not aimOn)
 	end
